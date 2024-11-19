@@ -1,3 +1,4 @@
+from datetime import datetime
 import scrapy
 import json
 import re
@@ -69,4 +70,10 @@ class LowesSpider(scrapy.Spider):
             "model_number": product["modelId"],
             "brand": product["brand"],
             "price": product_details["mfePrice"]["price"]["additionalData"]["retailPrice"],
+            "date": self.get_current_datetime_iso8601()
         }
+
+    @staticmethod
+    def get_current_datetime_iso8601():
+        """Returns the current UTC date and time in ISO 8601 format."""
+        return datetime.utcnow().isoformat() + 'Z'

@@ -38,7 +38,9 @@ class LowesSpider(scrapy.Spider):
 
                     for item in item_list:
                         item_id = item["product"]["omniItemId"]
-                        # yield scrapy.Request(product_url, callback=self.parse_product_data, meta={'store_id': store_id})
+                        item_url = f'https://www.lowes.com/wpd/{item_id}/productdetail/2442/Guest/29730'
+                        yield scrapy.Request(item_url, callback=self.parse_product_data, meta={'item_id': item_id})
+                        break
 
                 except json.JSONDecodeError:
                     self.log("Error decoding JSON data.")
@@ -52,14 +54,19 @@ class LowesSpider(scrapy.Spider):
         if next_page_url:
             yield scrapy.Request(next_page_url, callback=self.parse)
 
-    def parse_product_page(self, response):
+    def parse_product_data(self, response):
         # Extract details from product API response
+        product_data = json.loads(response.text)
 
-        product_data = response.data()
+        item_id = response.meta.get("item_id") # Retrieve item_id set in request metadata
 
-        # yield {
-        #     'product_url': response.url
-        #     'product_model_number': product_name,
-        #     'product_brand': product_name,
-        #     'product_price': product_price,
-        # }
+        product_details = product_data["productDetails"][item_id]
+        product = product_details["product"]
+
+        yield {
+            "item_id": item_id,
+            "url": response.urljoin(product["pdURL"]),
+            "model_number": product["modelId"],
+            "brand": product["brand"],
+            "price": product_details["mfePrice"]["price"]["additionalData"]["retailPrice"],
+        }

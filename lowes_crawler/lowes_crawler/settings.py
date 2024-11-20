@@ -7,6 +7,8 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
+from datetime import datetime
+
 BOT_NAME = "lowes_crawler"
 
 SPIDER_MODULES = ["lowes_crawler.spiders"]
@@ -14,7 +16,7 @@ NEWSPIDER_MODULE = "lowes_crawler.spiders"
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0"
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False
@@ -99,8 +101,9 @@ DEFAULT_REQUEST_HEADERS = {
 # Set settings whose default value is deprecated to a future-proof value
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 FEEDS = {
-    'data/%(name)s/%(name)s_%(time)s.json': {
-		'format': 'json',
+		f'data/%(name)s/%(name)s_{timestamp}.json': {
+			'format': 'json',
 		}
 }

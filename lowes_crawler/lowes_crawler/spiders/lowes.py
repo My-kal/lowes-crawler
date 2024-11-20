@@ -1,12 +1,16 @@
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from datetime import datetime
 import scrapy
 import json
+import math
 import uuid
 import re
 
 class LowesSpider(scrapy.Spider):
     name = "lowes"
     allowed_domains = ["lowes.com"]
+
+    products_per_page = 24
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -64,6 +68,34 @@ class LowesSpider(scrapy.Spider):
 
         if next_page_url:
             yield scrapy.Request(next_page_url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number}, callback=self.parse)
+        else:
+            """If next page url is unable to be extracted from HTML, build the url by calculating the next offset based on # of results"""
+
+            # Extract number of results
+            results_text = response.css('p.results::text').get()
+            total_products = int(''.join(filter(str.isdigit, results_text)))
+
+            # Calculate how many pages of products exist
+            total_pages = math.ceil(total_products / self.products_per_page)
+
+            # Extract current offset from URL
+            parsed_url = urlparse(response.url)
+            query_params = parse_qs(parsed_url.query, keep_blank_values=True)
+            current_offset = int(query_params.get('offset', [0])[0]) or 0
+
+            # Determine if there are more pages
+            if current_offset + self.products_per_page < total_products:
+                next_offset = current_offset + self.products_per_page
+
+                # Update query parameters with new offset
+                query_params.update({
+                    "offset": next_offset
+                })
+
+                # Rebuild URL with updated offset
+                next_page_url = parsed_url._replace(query=urlencode(query_params, doseq=True)).geturl()
+
+                yield scrapy.Request(next_page_url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number}, callback=self.parse)
 
     def parse_product_page(self, response):
         """ Extract product details from HTML on product page."""

@@ -25,13 +25,14 @@ class LowesSpider(scrapy.Spider):
         # Log loaded start_urls
         self.logger.info(f"Loaded start_urls: {self.start_urls}")
 
+        # Store Number and Zipcode for a Lowe's Location
+        self.store_number = config.get("store_number", "0416")
+        self.zip_code = config.get("zip_code", "28278")
+
+        self.logger.info(f"Store Number: {store_number} | Zipcode: {zip_code}")
+
         # Generate UUID to use as dbidv2 cookie in requests to avoid 403s and load correct # of results
         self.dbidv2 = str(uuid.uuid4())
-
-        # Store Number for a Lowe's Location
-        self.store_number = "0416"
-        self.zip_code = "28278"
-
     def start_requests(self):
         """Include dbidv2 and sn cookies to bypass 403 response."""
 

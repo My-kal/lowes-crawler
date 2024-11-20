@@ -57,7 +57,6 @@ class LowesSpider(scrapy.Spider):
                         item_url = response.urljoin(item["product"]["pdURL"])
 
                         yield scrapy.Request(item_url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number}, callback=self.parse_product_page, meta={'item_id': item_id})
-                        break
 
                 except json.JSONDecodeError:
                     self.log("Error decoding JSON data.")
@@ -88,9 +87,7 @@ class LowesSpider(scrapy.Spider):
                 next_offset = current_offset + self.products_per_page
 
                 # Update query parameters with new offset
-                query_params.update({
-                    "offset": next_offset
-                })
+                query_params.update({ "offset": next_offset })
 
                 # Rebuild URL with updated offset
                 next_page_url = parsed_url._replace(query=urlencode(query_params, doseq=True)).geturl()
@@ -121,7 +118,9 @@ class LowesSpider(scrapy.Spider):
                         product_details = preloaded_state["productDetails"][item_id]
 
                         model_number = product_details["product"]["modelId"]
-                        brand = product_details["product"]["brand"]
+
+                        # Not all products have a brand
+                        brand = product_details["product"].get('brand', None)
 
                         # Extract pricing information
                         price_data = product_details["mfePrice"]["price"]
@@ -146,16 +145,14 @@ class LowesSpider(scrapy.Spider):
                             "date": self.get_current_datetime_iso8601(),
                         }
                     except Exception as e:
-                        self.log(f"Error parsing data for item {item_id}")
+                        self.log(f"An error occurred parsing data for item {item_id}... {e}")
 
-                        with open(f'{item_id}.json', 'w') as f:
+                        with open(f'{item_id}_{self.get_current_datetime_iso8601()}.json', 'w') as f:
                             json.dump(preloaded_state, f, indent=4)
 
                 except json.JSONDecodeError:
                     self.log("Error decoding JSON data.")
-
                 break
-
 
     @staticmethod
     def get_current_datetime_iso8601():

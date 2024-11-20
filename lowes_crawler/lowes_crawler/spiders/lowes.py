@@ -9,12 +9,29 @@ import re
 import os
 
 class LowesSpider(scrapy.Spider):
+    """
+    Scrapy spider to scrape product details from Lowe's website.
+
+    This spider extracts product information (such as url, model number, brand, and price)
+    for items from Lowe's product listings. It handles pagination and retries for
+    pages that may have been blocked with a 403 response.
+    """
+
     name = "lowes"
     allowed_domains = ["lowes.com"]
 
     products_per_page = 24
 
     def __init__(self, *args, **kwargs):
+        """
+        Initialize the spider with configuration values loaded from config.json.
+
+        Parameters:
+        - start_urls (list): List of URLs to start scraping from.
+        - store_number (str): Store number for Lowe's location.
+        - zip_code (str): Zipcode of user's residence for shipping or delivery purposes
+        """
+
         super().__init__(*args, **kwargs)
         # Load the config file
         with open("config.json", "r") as file:
@@ -30,18 +47,40 @@ class LowesSpider(scrapy.Spider):
         self.store_number = config.get("store_number", "0416")
         self.zip_code = config.get("zip_code", "28278")
 
-        self.logger.info(f"Store Number: {store_number} | Zipcode: {zip_code}")
+        self.logger.info(f"Store Number: {self.store_number} | Zipcode: {self.zip_code}")
 
         # Generate UUID to use as dbidv2 cookie in requests to avoid 403s and load correct # of results
         self.dbidv2 = str(uuid.uuid4())
+
     def start_requests(self):
-        """Include dbidv2 and sn cookies to bypass 403 response."""
+        """
+        Send requests to start_urls with required cookies.
+
+        Yields:
+        scrapy.Request: Request object for each URL in self.start_urls with cookies for bypassing 403 errors.
+
+        Notes:
+        - The method uses the store number and dbidv2 as cookies to avoid 403 errors when requesting pages.
+        """
 
         for url in self.start_urls:
             yield scrapy.Request(url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number})
 
     def parse(self, response):
-        """Extract urls of products on results page."""
+        """
+        Parse the page for product links and extract next page URL from the preloaded state JSON from a <script> tag in the page.
+
+        Parameters:
+        - response (scrapy.http.Response): Response object for the current page.
+
+        Yields:
+        scrapy.Request: Request for each product page found in the preloaded state data.
+        scrapy.Request: Request for the next page if available, or a calculated next page URL.
+
+        Notes:
+        - If the next page link is available, a request for the next page is yielded.
+        - If no next page link is found, the method calculates the next page URL based on the current page's offset.
+        """
 
         # Extract all script tags
         scripts = response.css("script::text").getall()
@@ -103,7 +142,20 @@ class LowesSpider(scrapy.Spider):
                 yield scrapy.Request(next_page_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse)
 
     def parse_product_data(self, response):
-        """Extract product details from API response."""
+        """
+        Parse the product details API response and extract product information.
+
+        Extracts the url, model number, brand, price, and if there is a price restriction that prevents the price from being in the response data (e.g., "View Lower Price in Cart").
+
+        Parameters:
+        response (scrapy.http.Response): Response object for the product page.
+
+        Yields:
+        dict: A dictionary containing product details such as item_id, url, model_number, brand, price, price_hidden_in_cart, and date.
+
+        Raises:
+        Exception: If there is an error parsing the product details, the product data is stored in a json file in the failed_parses folder.
+        """
 
         item_id = response.meta.get("item_id") # Retrieve item_id set in request metadata
 
@@ -158,5 +210,10 @@ class LowesSpider(scrapy.Spider):
 
     @staticmethod
     def get_current_datetime_iso8601():
-        """Returns the current UTC date and time in ISO 8601 format."""
+        """
+        Returns the current UTC date and time in ISO 8601 format.
+
+        Returns:
+        str: The current date and time in ISO 8601 format, e.g., "2024-11-20T15:45:30.000Z".
+        """
         return datetime.utcnow().isoformat() + "Z"

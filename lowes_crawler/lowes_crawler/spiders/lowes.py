@@ -6,6 +6,7 @@ import math
 import uuid
 import time
 import re
+import os
 
 class LowesSpider(scrapy.Spider):
     name = "lowes"
@@ -66,7 +67,7 @@ class LowesSpider(scrapy.Spider):
 
                         yield scrapy.Request(item_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse_product_data, meta={"item_id": item_id})
                 except json.JSONDecodeError:
-                    self.log("Error decoding JSON data.")
+                    self.logger.error("Error decoding JSON data.")
                 break
 
          # Extract URL of next page
@@ -141,9 +142,18 @@ class LowesSpider(scrapy.Spider):
                 "date": self.get_current_datetime_iso8601(),
             }
         except Exception as e:
-            self.log(f"An error occurred parsing data for item {item_id}... {e}")
+            self.logger.error(f"An error occurred parsing data for item {item_id}... {e}")
 
-            with open(f"item_{item_id}_{time.time()}.json", "w") as f:
+            # Store product data on parsing failures for reference during debugging
+
+            folder_path = "failed_parses"
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)  # Create folder if it doesn't exist
+
+            file_name = f"item_{item_id}_{time.time()}.json"
+            file_path = os.path.join(folder_path, file_name)
+
+            with open(file_path, "w") as f:
                 json.dump(data, f, indent=4)
 
     @staticmethod

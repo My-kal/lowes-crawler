@@ -8,6 +8,8 @@ import time
 import re
 import os
 
+from ..items import LowesProductItem
+
 class LowesSpider(scrapy.Spider):
     """
     Scrapy spider to scrape product details from Lowe's website.
@@ -33,6 +35,7 @@ class LowesSpider(scrapy.Spider):
         """
 
         super().__init__(*args, **kwargs)
+
         # Load the config file
         with open("config.json", "r") as file:
             config = json.load(file)
@@ -65,6 +68,12 @@ class LowesSpider(scrapy.Spider):
 
         for url in self.start_urls:
             yield scrapy.Request(url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number})
+
+    def build_product_url(self, item_id):
+        """
+        Builds the product URL using the item ID, store number, and zip code.
+        """
+        return f"https://www.lowes.com/wpd/{item_id}/productdetail/{self.store_number}/Guest/{self.zip_code}"
 
     def parse(self, response):
         """
@@ -101,8 +110,7 @@ class LowesSpider(scrapy.Spider):
 
                     for item in item_list:
                         item_id = item["product"]["omniItemId"]
-
-                        item_url = f"https://www.lowes.com/wpd/{item_id}/productdetail/{self.store_number}/Guest/{self.zip_code}"
+                        item_url = self.build_product_url(item_id)
 
                         yield scrapy.Request(item_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse_product_data, meta={"item_id": item_id})
                 except json.JSONDecodeError:
@@ -151,7 +159,7 @@ class LowesSpider(scrapy.Spider):
         response (scrapy.http.Response): Response object for the product page.
 
         Yields:
-        dict: A dictionary containing product details such as item_id, url, model_number, brand, price, price_hidden_in_cart, and date.
+        LowesProductItem: A `LowesProductItem` containing the extracted product information such as item_id, url, model_number, brand, price, price_hidden_in_cart, and date.
 
         Raises:
         Exception: If there is an error parsing the product details, the product data is stored in a json file in the failed_parses folder.
@@ -161,15 +169,21 @@ class LowesSpider(scrapy.Spider):
 
         data = response.json()
 
+        item = LowesProductItem()
+        item["item_id"] = item_id
+        item["date"] = self.get_current_datetime_iso8601()
+
         try:
             product_details = data["productDetails"][item_id]
             product = product_details["product"]
 
             product_url = product["pdURL"]
-            model_number = product["modelId"]
+            item["url"] = response.urljoin(product_url)
+
+            item["model_number"] = product["modelId"]
 
             # Not all products have a brand
-            brand = product.get("brand", None)
+            item["brand"] = product.get("brand", None)
 
             # Extract pricing information
             price_data = product_details["mfePrice"]["price"]
@@ -178,35 +192,31 @@ class LowesSpider(scrapy.Spider):
 
             if map_price_msg is not None and map_price_msg == "View Lower Price In Cart":
                 # TODO: add item to cart to get price
-                price_hidden_in_cart = True
-                price = None
+                item["price_hidden_in_cart"] = True
+                item["price"] = None
             else:
-                price_hidden_in_cart = False
-                price = price_data["additionalData"]["sellingPrice"]
+                item["price_hidden_in_cart"] = False
+                item["price"] = price_data["additionalData"]["sellingPrice"]
 
-            yield {
-                "item_id": item_id,
-                "url": response.urljoin(product_url),
-                "model_number": model_number,
-                "brand": brand,
-                "price_hidden_in_cart": price_hidden_in_cart,
-                "price": price,
-                "date": self.get_current_datetime_iso8601(),
-            }
+            yield item
         except Exception as e:
             self.logger.error(f"An error occurred parsing data for item {item_id}... {e}")
+            self.store_failed_product_data(item_id, data)
 
-            # Store product data on parsing failures for reference during debugging
+    def store_failed_product_data(self, item_id, data):
+        """
+        Stores product data when parsing fails, for reference during debugging.
+        """
 
-            folder_path = "failed_parses"
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)  # Create folder if it doesn't exist
+        folder_path = "failed_parses"
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
 
-            file_name = f"item_{item_id}_{time.time()}.json"
-            file_path = os.path.join(folder_path, file_name)
+        file_name = f"item_{item_id}_{time.time()}.json"
+        file_path = os.path.join(folder_path, file_name)
 
-            with open(file_path, "w") as f:
-                json.dump(data, f, indent=4)
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=4)
 
     @staticmethod
     def get_current_datetime_iso8601():

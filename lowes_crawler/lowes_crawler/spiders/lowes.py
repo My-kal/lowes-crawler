@@ -4,6 +4,7 @@ import scrapy
 import json
 import math
 import uuid
+import time
 import re
 
 class LowesSpider(scrapy.Spider):
@@ -29,14 +30,19 @@ class LowesSpider(scrapy.Spider):
 
         # Store Number for a Lowe's Location
         self.store_number = "0416"
+        self.zip_code = "28278"
 
     def start_requests(self):
+        """Include dbidv2 and sn cookies to bypass 403 response."""
+
         for url in self.start_urls:
-            yield scrapy.Request(url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number})
+            yield scrapy.Request(url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number})
 
     def parse(self, response):
+        """Extract urls of products on results page."""
+
         # Extract all script tags
-        scripts = response.css('script::text').getall()
+        scripts = response.css("script::text").getall()
 
         # Search for script containing window['__PRELOADED_STATE__'] and extract JSON
         for script in scripts:
@@ -50,14 +56,14 @@ class LowesSpider(scrapy.Spider):
                     preloaded_state = json.loads(preloaded_state_json)
                     self.logger.info("Successfully extracted and parsed __PRELOADED_STATE__ data.")
 
-                    item_list = preloaded_state.get('itemList', [])
+                    item_list = preloaded_state.get("itemList", [])
 
                     for item in item_list:
                         item_id = item["product"]["omniItemId"]
-                        item_url = response.urljoin(item["product"]["pdURL"])
 
-                        yield scrapy.Request(item_url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number}, callback=self.parse_product_page, meta={'item_id': item_id})
+                        item_url = f"https://www.lowes.com/wpd/{item_id}/productdetail/{self.store_number}/Guest/{self.zip_code}"
 
+                        yield scrapy.Request(item_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse_product_data, meta={"item_id": item_id})
                 except json.JSONDecodeError:
                     self.log("Error decoding JSON data.")
                 break
@@ -66,13 +72,13 @@ class LowesSpider(scrapy.Spider):
         next_page_url = response.css('link[rel="next"]::attr(href)').get()
 
         if next_page_url:
-            yield scrapy.Request(next_page_url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number}, callback=self.parse)
+            yield scrapy.Request(next_page_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse)
         else:
             """If next page url is unable to be extracted from HTML, build the url by calculating the next offset based on # of results"""
 
             # Extract number of results
-            results_text = response.css('p.results::text').get()
-            total_products = int(''.join(filter(str.isdigit, results_text)))
+            results_text = response.css("p.results::text").get()
+            total_products = int("".join(filter(str.isdigit, results_text)))
 
             # Calculate how many pages of products exist
             total_pages = math.ceil(total_products / self.products_per_page)
@@ -80,7 +86,7 @@ class LowesSpider(scrapy.Spider):
             # Extract current offset from URL
             parsed_url = urlparse(response.url)
             query_params = parse_qs(parsed_url.query, keep_blank_values=True)
-            current_offset = int(query_params.get('offset', [0])[0]) or 0
+            current_offset = int(query_params.get("offset", [0])[0]) or 0
 
             # Determine if there are more pages
             if current_offset + self.products_per_page < total_products:
@@ -92,69 +98,54 @@ class LowesSpider(scrapy.Spider):
                 # Rebuild URL with updated offset
                 next_page_url = parsed_url._replace(query=urlencode(query_params, doseq=True)).geturl()
 
-                yield scrapy.Request(next_page_url, cookies={'dbidv2': self.dbidv2, 'sn': self.store_number}, callback=self.parse)
+                yield scrapy.Request(next_page_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse)
 
-    def parse_product_page(self, response):
-        """ Extract product details from HTML on product page."""
+    def parse_product_data(self, response):
+        """Extract product details from API response."""
 
         item_id = response.meta.get("item_id") # Retrieve item_id set in request metadata
 
-        # Extract all script tags
-        scripts = response.css('script::text').getall()
+        data = response.json()
 
-        # Search for script containing window['__PRELOADED_STATE__'] and extract JSON
-        for script in scripts:
-            match = re.search(r"window\['__PRELOADED_STATE__'\]\s*=\s*({.*})", script, re.DOTALL)
-            if match:
-                # Extract JSON from regex match
-                preloaded_state_json = match.group(1)
+        try:
+            product_details = data["productDetails"][item_id]
+            product = product_details["product"]
 
-                try:
-                    # Parse JSON into dictionary
-                    preloaded_state = json.loads(preloaded_state_json)
-                    self.logger.info("Successfully extracted and parsed __PRELOADED_STATE__ data.")
+            product_url = product["pdURL"]
+            model_number = product["modelId"]
 
-                    try:
-                        product_details = preloaded_state["productDetails"][item_id]
+            # Not all products have a brand
+            brand = product.get("brand", None)
 
-                        model_number = product_details["product"]["modelId"]
+            # Extract pricing information
+            price_data = product_details["mfePrice"]["price"]
 
-                        # Not all products have a brand
-                        brand = product_details["product"].get('brand', None)
+            map_price_msg = price_data.get("mapPriceMessage")
 
-                        # Extract pricing information
-                        price_data = product_details["mfePrice"]["price"]
+            if map_price_msg is not None and map_price_msg == "View Lower Price In Cart":
+                # TODO: add item to cart to get price
+                price_hidden_in_cart = True
+                price = None
+            else:
+                price_hidden_in_cart = False
+                price = price_data["additionalData"]["sellingPrice"]
 
-                        map_price_msg = price_data.get("mapPriceMessage")
+            yield {
+                "item_id": item_id,
+                "url": response.urljoin(product_url),
+                "model_number": model_number,
+                "brand": brand,
+                "price_hidden_in_cart": price_hidden_in_cart,
+                "price": price,
+                "date": self.get_current_datetime_iso8601(),
+            }
+        except Exception as e:
+            self.log(f"An error occurred parsing data for item {item_id}... {e}")
 
-                        if map_price_msg is not None and map_price_msg == "View Lower Price In Cart":
-                            # TODO: add item to cart to get price
-                            price_hidden_in_cart = True
-                            price = None
-                        else:
-                            price_hidden_in_cart = False
-                            price = price_data["additionalData"]["sellingPrice"]
-
-                        yield {
-                            "item_id": item_id,
-                            "url": response.url,
-                            "model_number": model_number,
-                            "brand": brand,
-                            "price_hidden_in_cart": price_hidden_in_cart,
-                            "price": price,
-                            "date": self.get_current_datetime_iso8601(),
-                        }
-                    except Exception as e:
-                        self.log(f"An error occurred parsing data for item {item_id}... {e}")
-
-                        with open(f'{item_id}_{self.get_current_datetime_iso8601()}.json', 'w') as f:
-                            json.dump(preloaded_state, f, indent=4)
-
-                except json.JSONDecodeError:
-                    self.log("Error decoding JSON data.")
-                break
+            with open(f"item_{item_id}_{time.time()}.json", "w") as f:
+                json.dump(data, f, indent=4)
 
     @staticmethod
     def get_current_datetime_iso8601():
         """Returns the current UTC date and time in ISO 8601 format."""
-        return datetime.utcnow().isoformat() + 'Z'
+        return datetime.utcnow().isoformat() + "Z"

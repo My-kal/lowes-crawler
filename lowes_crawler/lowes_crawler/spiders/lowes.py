@@ -75,6 +75,21 @@ class LowesSpider(scrapy.Spider):
         """
         return f"https://www.lowes.com/wpd/{item_id}/productdetail/{self.store_number}/Guest/{self.zip_code}"
 
+    def has_query_params(self, url):
+        """
+        Checks if a given URL contains query parameters.
+
+        Parameters:
+        url (str): URL to be checked.
+
+        Returns:
+        bool:
+            - True if the URL contains query parameters.
+            - False if no query parameters are present.
+        """
+        parsed_url = urlparse(url)
+        return bool(parsed_url.query)
+
     def parse(self, response):
         """
         Parse the page for product links and extract next page URL from the preloaded state JSON from a <script> tag in the page.
@@ -120,7 +135,11 @@ class LowesSpider(scrapy.Spider):
          # Extract URL of next page
         next_page_url = response.css('link[rel="next"]::attr(href)').get()
 
-        if next_page_url:
+        # Calculate next page url if current url has parameters
+        # There are cases where the next page url
+        # doesn't include the query parameters of the starter url
+        # which causes a redirect to a different page
+        if not self.has_query_params(response.url) and next_page_url:
             yield scrapy.Request(next_page_url, cookies={"dbidv2": self.dbidv2, "sn": self.store_number}, callback=self.parse)
         else:
             """If next page url is unable to be extracted from HTML, build the url by calculating the next offset based on # of results"""

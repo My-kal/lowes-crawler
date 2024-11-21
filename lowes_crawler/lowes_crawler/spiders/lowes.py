@@ -30,8 +30,8 @@ class LowesSpider(scrapy.Spider):
 
         Parameters:
         - start_urls (list): List of URLs to start scraping from.
-        - store_number (str): Store number for Lowe's location.
-        - zip_code (str): Zipcode of user's residence for shipping or delivery purposes
+        - store_number (str): Store number of a Lowe's location.
+        - zip_code (str): Zipcode of location for shipping or delivery purposes
         """
 
         super().__init__(*args, **kwargs)
@@ -159,7 +159,7 @@ class LowesSpider(scrapy.Spider):
         response (scrapy.http.Response): Response object for the product page.
 
         Yields:
-        LowesProductItem: A `LowesProductItem` containing the extracted product information such as item_id, url, model_number, brand, price, price_hidden_in_cart, and date.
+        LowesProductItem: A `LowesProductItem` containing the extracted product information such as item_id, url, model_number, brand, price, price_hidden_in_cart, store_number, zip_code, and date.
 
         Raises:
         Exception: If there is an error parsing the product details, the product data is stored in a json file in the failed_parses folder.
@@ -171,6 +171,8 @@ class LowesSpider(scrapy.Spider):
 
         item = LowesProductItem()
         item["item_id"] = item_id
+        item["store_number"] = self.store_number
+        item["zip_code"] = self.zip_code
         item["date"] = self.get_current_datetime_iso8601()
 
         try:

@@ -17,6 +17,8 @@ class LowesProductItem(scrapy.Item):
     brand = scrapy.Field()  # Product brand (optional - not all products have a brand)
     price = scrapy.Field()  # Product price
     price_hidden_in_cart = scrapy.Field()  # Whether the price is hidden until added to the cart
+    store_number = scrapy.Field() # Store number of a Lowe's location
+    zip_code = scrapy.Field() # Zipcode of location for shipping or delivery purposes
     date = scrapy.Field()  # Date and time when the product data was scraped
 
     def __repr__(self):

@@ -115,7 +115,7 @@ FEEDS = {
 }
 
 RETRY_ENABLED = True
-RETRY_TIMES = 25  # Number of retries
+RETRY_TIMES = 10  # Number of retries
 RETRY_HTTP_CODES = [403, 500, 502, 503, 504]
 
 DUPEFILTER_CLASS = 'scrapy.dupefilters.BaseDupeFilter'

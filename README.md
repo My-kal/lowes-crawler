@@ -66,7 +66,7 @@ The current implementation of the crawler is designed for demonstration and loca
 1. **Proxy Usage and Anti-Bot Protection**
     Lowes uses Akamai Anti-Bot protection to detect and block automated scraping activities. While the crawler works for small-scale scraping, attempting to scrape at a large scale without additional precautions may result in being blocked.
 
- To mitigate this, implementing proxy support with rotating proxies is recommended for large-scale or continuous scraping to make the crawler less susceptible to IP bans and anti-bot blocking.
+    To mitigate this, implementing proxy support with rotating proxies is recommended for large-scale or continuous scraping to make the crawler less susceptible to IP bans and anti-bot blocking.
 
 2. **Hidden Prices**
  Some products may have prices hidden behind an "Add to Cart" requirement. The spider does not currently handle this scenario, meaning such prices will not be captured and will be noted in the output with the property `price_hidden_in_cart`. Add to cart functionality would be necessary to fetch these prices.

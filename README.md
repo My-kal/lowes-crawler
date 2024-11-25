@@ -12,12 +12,12 @@ The crawler is implemented using the Scrapy framework, with configurable paramet
     - Extract detailed product information for each wreath:
      - **Item Id**
      - **URL**
-        - **Model Number**
-        - **Brand**
-        - **Price**
-        - **Is Price Hidden In Cart**
-        - **Store Number**
-        - **ZIP Code**
+     - **Model Number**
+     - **Brand**
+     - **Price**
+     - **Is Price Hidden In Cart**
+     - **Store Number**
+     - **ZIP Code**
 2. **Data Analysis**
 
 - Count the number of wreaths by brand.
